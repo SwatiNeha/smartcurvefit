@@ -3,10 +3,27 @@
 #include "loss.cpp"
 using namespace Rcpp;
 
+double sd_cpp(NumericVector v) {
+  int n = v.size();
+  if (n < 2) return 0.0;
+  double mean = std::accumulate(v.begin(), v.end(), 0.0) / n;
+  double sq_sum = std::inner_product(v.begin(), v.end(), v.begin(), 0.0);
+  return std::sqrt((sq_sum - n * mean * mean) / (n - 1));
+}
+
 // [[Rcpp::export]]
 List fit_model_cpp(NumericVector x, NumericVector y, std::string model_type,
                    NumericVector start_params,
                    double a_min = 0.5, double a_max = 2.0, double b_min = 0.5, double b_max = 2.0, double step = 0.1) {
+  if (x.size() != y.size())
+    stop("Input vectors x and y must be the same length.");
+  if (x.size() < 2)
+    stop("At least two data points are required.");
+  if (start_params.size() < 2)
+    stop("start_params must have at least two values for power law.");
+  if (sd_cpp(x) == 0.0 || sd_cpp(y) == 0.0)
+    stop("x and y must vary (not be constant) to fit a model.");
+
   // 1. Choose model
   Model* model = NULL;
   if (model_type == "power_law") {
