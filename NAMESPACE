@@ -2,5 +2,5 @@
 
 S3method(print,smartFit)
 export(fit_model)
-importFrom(Rcpp,sourceCpp)
+importFrom(Rcpp,evalCpp)
 useDynLib(smartcurvefit, .registration = TRUE)
