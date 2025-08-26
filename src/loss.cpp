@@ -4,19 +4,36 @@ using namespace Rcpp;
 // ---- Base Loss ----
 class Loss {
 public:
-  virtual double compute(NumericVector y, NumericVector yhat) = 0;
   virtual ~Loss() {}
+  virtual double compute(const NumericVector& y,
+                         const NumericVector& yhat) const = 0;
 };
 
-// ---- L2 Loss ----
+// ---- L2 (MSE) ----
 class L2Loss : public Loss {
 public:
-  double compute(NumericVector y, NumericVector yhat) {
-    double sum = 0.0;
-    for (int i = 0; i < y.size(); ++i) {
-      double diff = y[i] - yhat[i];
-      sum += diff * diff;
+  double compute(const NumericVector& y,
+                 const NumericVector& yhat) const override {
+    const int n = y.size();
+    double s = 0.0;
+    for (int i = 0; i < n; ++i) {
+      const double r = y[i] - yhat[i];
+      s += r * r;
     }
-    return sum / y.size();
+    return s / n; // MSE
+  }
+};
+
+// ---- L1 (MAE) ----
+class L1Loss : public Loss {
+public:
+  double compute(const NumericVector& y,
+                 const NumericVector& yhat) const override {
+    const int n = y.size();
+    double s = 0.0;
+    for (int i = 0; i < n; ++i) {
+      s += std::fabs(y[i] - yhat[i]);
+    }
+    return s / n; // MAE
   }
 };

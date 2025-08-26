@@ -1,25 +1,37 @@
 #include <Rcpp.h>
+#include <cmath>
 using namespace Rcpp;
 
 // ---- Base Model ----
 class Model {
 public:
-  virtual NumericVector predict(NumericVector x, NumericVector params) = 0;
-  virtual int n_params() = 0;
   virtual ~Model() {}
+  virtual NumericVector predict(const NumericVector& x,
+                                const NumericVector& params) const = 0;
 };
 
-// ---- Power Law Model ----
+// ---- Power law: y = a * x^b ----
 class PowerLawModel : public Model {
 public:
-  NumericVector predict(NumericVector x, NumericVector params) {
-    double a = params[0];
-    double b = params[1];
+  NumericVector predict(const NumericVector& x,
+                        const NumericVector& p) const override {
     NumericVector yhat(x.size());
-    for (int i = 0; i < x.size(); ++i) {
-      yhat[i] = a * pow(x[i], b);
-    }
+    const double a = p[0], b = p[1];
+    for (int i = 0; i < x.size(); ++i)
+      yhat[i] = a * std::pow(x[i], b);
     return yhat;
   }
-  int n_params() { return 2; }
+};
+
+// ---- Exponential: y = a * exp(b * x) ----
+class ExponentialModel : public Model {
+public:
+  NumericVector predict(const NumericVector& x,
+                        const NumericVector& p) const override {
+    NumericVector yhat(x.size());
+    const double a = p[0], b = p[1];
+    for (int i = 0; i < x.size(); ++i)
+      yhat[i] = a * std::exp(b * x[i]);
+    return yhat;
+  }
 };

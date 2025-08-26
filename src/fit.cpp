@@ -1,62 +1,286 @@
+// fit.cpp
 #include <Rcpp.h>
+#include <cmath>
+#include <string>
+#include <memory>
+#include <vector>
+#include <limits>
+#include <algorithm>
+#include <numeric>
 #include "models.cpp"
 #include "loss.cpp"
 using namespace Rcpp;
 
-double sd_cpp(NumericVector v) {
-  int n = v.size();
-  if (n < 2) return 0.0;
-  double mean = std::accumulate(v.begin(), v.end(), 0.0) / n;
-  double sq_sum = std::inner_product(v.begin(), v.end(), v.begin(), 0.0);
-  return std::sqrt((sq_sum - n * mean * mean) / (n - 1));
+// ---- metrics helpers ----
+static inline double mse_of(const NumericVector& y, const NumericVector& yhat) {
+  const int n = y.size();
+  double s = 0.0;
+  for (int i = 0; i < n; ++i) { const double r = y[i] - yhat[i]; s += r*r; }
+  return s / n;
+}
+static inline double rmse_of(const NumericVector& y, const NumericVector& yhat) {
+  return std::sqrt(mse_of(y, yhat));
+}
+static inline double mae_of(const NumericVector& y, const NumericVector& yhat) {
+  const int n = y.size();
+  double s = 0.0;
+  for (int i = 0; i < n; ++i) s += std::fabs(y[i] - yhat[i]);
+  return s / n;
+}
+
+// ---- quick linear-regression start guesses ----
+static NumericVector start_guess_power(const NumericVector& x, const NumericVector& y) {
+  int n = x.size();
+  bool ok = true;
+  for (int i=0;i<n;++i) if (x[i] <= 0.0 || y[i] <= 0.0) { ok = false; break; }
+  if (!ok || n < 2) return NumericVector::create(1.0, 1.0);
+  // log y = log a + b log x
+  double Sx=0, Sy=0, Sxx=0, Sxy=0;
+  for (int i=0;i<n;++i) {
+    double lx = std::log(x[i]);
+    double ly = std::log(y[i]);
+    Sx += lx; Sy += ly; Sxx += lx*lx; Sxy += lx*ly;
+  }
+  double denom = n*Sxx - Sx*Sx;
+  if (std::fabs(denom) < 1e-12) return NumericVector::create(1.0, 1.0);
+  double b = (n*Sxy - Sx*Sy) / denom;
+  double a = std::exp((Sy - b*Sx)/n);
+  if (!R_finite(a) || !R_finite(b)) return NumericVector::create(1.0, 1.0);
+  return NumericVector::create(a, b);
+}
+
+static NumericVector start_guess_exp(const NumericVector& x, const NumericVector& y) {
+  int n = x.size();
+  bool ok = true;
+  for (int i=0;i<n;++i) if (y[i] <= 0.0) { ok = false; break; }
+  if (!ok || n < 2) return NumericVector::create(1.0, 0.1);
+  // log y = log a + b x
+  double Sx=0, Sy=0, Sxx=0, Sxy=0;
+  for (int i=0;i<n;++i) {
+    double lx = x[i];
+    double ly = std::log(y[i]);
+    Sx += lx; Sy += ly; Sxx += lx*lx; Sxy += lx*ly;
+  }
+  double denom = n*Sxx - Sx*Sx;
+  if (std::fabs(denom) < 1e-12) return NumericVector::create(1.0, 0.1);
+  double b = (n*Sxy - Sx*Sy) / denom;
+  double a = std::exp((Sy - b*Sx)/n);
+  if (!R_finite(a) || !R_finite(b)) return NumericVector::create(1.0, 0.1);
+  return NumericVector::create(a, b);
+}
+
+// local grid (refined) fit for one loss
+struct FitResult {
+  std::string loss_name;
+  double a, b;
+  NumericVector fitted;
+  double mse, rmse, mae;
+};
+
+static FitResult fit_one_loss_local(const NumericVector& x, const NumericVector& y,
+                                    const std::string& model_name,
+                                    const std::string& loss_name,
+                                    const NumericVector& start_params,
+                                    bool enforce_a_positive = true) {
+  std::unique_ptr<Model> model;
+  if (model_name == "power_law")        model.reset(new PowerLawModel());
+  else if (model_name == "exponential") model.reset(new ExponentialModel());
+  else Rcpp::stop("Error: Unknown model_name.");
+
+  std::unique_ptr<Loss> loss;
+  if      (loss_name == "L2") loss.reset(new L2Loss()); // objective = MSE
+  else if (loss_name == "L1") loss.reset(new L1Loss()); // objective = MAE
+  else Rcpp::stop("Error: Unknown loss_name.");
+
+  const double a0 = start_params[0];
+  const double b0 = start_params[1];
+
+  // adaptive windows/step (no user knobs)
+  double wa = std::max(0.5 * std::max(std::fabs(a0), 1.0), 0.25);
+  double wb = std::max(0.5 * std::max(std::fabs(b0), 1.0), 0.25);
+  double step = std::max(wa, wb) / 20.0;     // ~20 steps across the wider dim
+  int refine_iters = 2;
+
+  auto eval_grid = [&](double a_min, double a_max, double b_min, double b_max,
+                       double stp, double &best_a, double &best_b, double &best_obj) {
+    NumericVector params(2), yhat;
+    const double eps = 1e-12;
+    for (double a = a_min; a <= a_max + eps; a += stp) {
+      double a_test = enforce_a_positive ? std::max(a, 1e-12) : a;
+      params[0] = a_test;
+      for (double b = b_min; b <= b_max + eps; b += stp) {
+        params[1] = b;
+        yhat = model->predict(x, params);
+        double obj = loss->compute(y, yhat); // MSE or MAE
+        if (obj < best_obj) { best_obj = obj; best_a = a_test; best_b = b; }
+      }
+    }
+  };
+
+  double a_min = a0 - wa, a_max = a0 + wa;
+  double b_min = b0 - wb, b_max = b0 + wb;
+  if (enforce_a_positive) a_min = std::max(a_min, 1e-12);
+
+  double best_a = enforce_a_positive ? std::max(a0, 1e-12) : a0;
+  double best_b = b0;
+  NumericVector yhat0 = model->predict(x, NumericVector::create(best_a, best_b));
+  double best_obj = loss->compute(y, yhat0);
+
+  // coarse + refinements
+  eval_grid(a_min, a_max, b_min, b_max, step, best_a, best_b, best_obj);
+  for (int it=0; it<refine_iters; ++it) {
+    step *= 0.5; wa *= 0.5; wb *= 0.5;
+    double na_min = best_a - wa, na_max = best_a + wa;
+    double nb_min = best_b - wb, nb_max = best_b + wb;
+    if (enforce_a_positive) na_min = std::max(na_min, 1e-12);
+    eval_grid(na_min, na_max, nb_min, nb_max, step, best_a, best_b, best_obj);
+  }
+
+  NumericVector best_params = NumericVector::create(best_a, best_b);
+  NumericVector fitted      = model->predict(x, best_params);
+  return FitResult{
+    loss_name, best_a, best_b, fitted,
+    mse_of(y, fitted), rmse_of(y, fitted), mae_of(y, fitted)
+  };
+}
+
+// ---- build deterministic k folds: i % k ----
+static std::vector<int> make_fold_ids(int n, int k) {
+  std::vector<int> fid(n);
+  for (int i=0;i<n;++i) fid[i] = i % k;
+  return fid;
 }
 
 // [[Rcpp::export]]
-List fit_model_cpp(NumericVector x, NumericVector y, std::string model_type,
-                   NumericVector start_params,
-                   double a_min = 0.5, double a_max = 2.0, double b_min = 0.5, double b_max = 2.0, double step = 0.1) {
-  if (x.size() != y.size())
-    stop("Input vectors x and y must be the same length.");
-  if (x.size() < 2)
-    stop("At least two data points are required.");
-  if (start_params.size() < 2)
-    stop("start_params must have at least two values for power law.");
-  if (sd_cpp(x) == 0.0 || sd_cpp(y) == 0.0)
-    stop("x and y must vary (not be constant) to fit a model.");
+List fit_model_cv_cpp(NumericVector x, NumericVector y,
+                      std::string model_type,            // "power_law", "exponential", or "auto"/"" -> power_law
+                      std::string select_metric          // "rmse" or "mae"
+) {
+  int n = x.size();
+  if (n != y.size()) Rcpp::stop("Error: x and y must have the same length.");
+  if (n < 3)         Rcpp::stop("Error: Need at least three points for CV.");
+  for (int i=0;i<n;++i)
+    if (!R_finite(x[i]) || !R_finite(y[i])) Rcpp::stop("Error: Non-finite values detected.");
 
-  // 1. Choose model
-  Model* model = NULL;
-  if (model_type == "power_law") {
-    model = new PowerLawModel();
-  } else {
-    stop("Model type not supported");
-  }
-  // 2. Always use L2Loss for now
-  Loss* loss = new L2Loss();
-
-  // 3. Grid search for best parameters
-  double best_loss = 1e20;
-  double best_a = start_params[0], best_b = start_params[1];
-  NumericVector params(2);
-  for (double a = a_min; a <= a_max; a += step) {
-    for (double b = b_min; b <= b_max; b += step) {
-      params[0] = a; params[1] = b;
-      NumericVector yhat = model->predict(x, params);
-      double l = loss->compute(y, yhat);
-      if (l < best_loss) {
-        best_loss = l;
-        best_a = a; best_b = b;
-      }
+    // model choice
+    if (model_type == "" || model_type == "auto") model_type = "power_law";
+    if (model_type != "power_law" && model_type != "exponential")
+      Rcpp::stop("Error: Unsupported model type. Use 'power_law' or 'exponential'.");
+    if (model_type == "power_law") {
+      for (int i=0;i<n;++i) if (x[i] <= 0.0) Rcpp::stop("Error: For power_law, all x must be > 0.");
     }
-  }
-  NumericVector best_params = NumericVector::create(best_a, best_b);
-  NumericVector fitted = model->predict(x, best_params);
 
-  delete model;
-  delete loss;
-  return List::create(
-    Named("coefficients") = best_params,
-    Named("fitted.values") = fitted,
-    Named("loss") = best_loss
-  );
+    // lower-case metric
+    std::string metric = select_metric;
+    std::transform(metric.begin(), metric.end(), metric.begin(), ::tolower);
+    if (metric != "rmse" && metric != "mae")
+      Rcpp::stop("Error: metric must be 'rmse' or 'mae'.");
+
+    // build folds
+    int k = std::min(5, n); if (k < 2) k = 2;
+    std::vector<int> fid = make_fold_ids(n, k);
+
+    // CV accumulators
+    std::vector<double> rmse_L1(k), mae_L1(k), rmse_L2(k), mae_L2(k);
+
+    // per-fold train/val
+    for (int f=0; f<k; ++f) {
+      // split
+      std::vector<int> trn_idx, val_idx;
+      trn_idx.reserve(n); val_idx.reserve(n/k + 1);
+      for (int i=0;i<n;++i) {
+        if (fid[i] == f) val_idx.push_back(i);
+        else trn_idx.push_back(i);
+      }
+      // build vectors
+      NumericVector xtr(trn_idx.size()), ytr(trn_idx.size());
+      NumericVector xva(val_idx.size()), yva(val_idx.size());
+      for (size_t j=0;j<trn_idx.size();++j){ xtr[j]=x[trn_idx[j]]; ytr[j]=y[trn_idx[j]]; }
+      for (size_t j=0;j<val_idx.size();++j){ xva[j]=x[val_idx[j]]; yva[j]=y[val_idx[j]]; }
+
+      // starts from training set
+      NumericVector start = (model_type == "power_law") ?
+      start_guess_power(xtr, ytr) : start_guess_exp(xtr, ytr);
+
+      // fit both losses on training
+      bool enforce_pos = (model_type == "power_law");
+      FitResult trn_L1 = fit_one_loss_local(xtr, ytr, model_type, "L1", start, enforce_pos);
+      FitResult trn_L2 = fit_one_loss_local(xtr, ytr, model_type, "L2", start, enforce_pos);
+
+      // validate on held-out fold
+      std::unique_ptr<Model> model;
+      if (model_type == "power_law")      model.reset(new PowerLawModel());
+      else                                model.reset(new ExponentialModel());
+
+      NumericVector yhat1 = model->predict(xva, NumericVector::create(trn_L1.a, trn_L1.b));
+      NumericVector yhat2 = model->predict(xva, NumericVector::create(trn_L2.a, trn_L2.b));
+
+      rmse_L1[f] = rmse_of(yva, yhat1);
+      mae_L1[f]  = mae_of(yva, yhat1);
+      rmse_L2[f] = rmse_of(yva, yhat2);
+      mae_L2[f]  = mae_of(yva, yhat2);
+    }
+
+    auto mean_of = [](const std::vector<double>& v){
+      double s=0; for(double z: v) s+=z; return s / (double)v.size();
+    };
+    auto sd_of = [](const std::vector<double>& v){
+      double m=0; for(double z: v) m+=z; m/=v.size();
+      double s=0; for(double z: v) { double d=z-m; s+=d*d; }
+      return std::sqrt(s/(double)(v.size()>1? v.size()-1 : 1));
+    };
+
+    double m_rmse_L1 = mean_of(rmse_L1), m_rmse_L2 = mean_of(rmse_L2);
+    double m_mae_L1  = mean_of(mae_L1),  m_mae_L2  = mean_of(mae_L2);
+    double s_rmse_L1 = sd_of(rmse_L1),   s_rmse_L2 = sd_of(rmse_L2);
+    double s_mae_L1  = sd_of(mae_L1),    s_mae_L2  = sd_of(mae_L2);
+
+    // choose winner by chosen metric
+    std::string winner = (metric == "rmse")
+      ? ((m_rmse_L1 <= m_rmse_L2) ? "L1" : "L2")
+      : ((m_mae_L1  <= m_mae_L2)  ? "L1" : "L2");
+    double cv_score = (metric == "rmse") ? ((winner=="L1")? m_rmse_L1 : m_rmse_L2)
+      : ((winner=="L1")? m_mae_L1  : m_mae_L2);
+
+    // Refit on FULL data with winning loss
+    NumericVector start_full = (model_type == "power_law")
+      ? start_guess_power(x, y) : start_guess_exp(x, y);
+    bool enforce_pos_full = (model_type == "power_law");
+
+    FitResult full_L1 = fit_one_loss_local(x, y, model_type, "L1", start_full, enforce_pos_full);
+    FitResult full_L2 = fit_one_loss_local(x, y, model_type, "L2", start_full, enforce_pos_full);
+    FitResult full_win = (winner == "L1") ? full_L1 : full_L2;
+
+    // CV summary dataframe
+    DataFrame cvdf = DataFrame::create(
+      Named("loss")     = CharacterVector::create("L1","L2"),
+      Named("mean_rmse")= NumericVector::create(m_rmse_L1, m_rmse_L2),
+      Named("sd_rmse")  = NumericVector::create(s_rmse_L1, s_rmse_L2),
+      Named("mean_mae") = NumericVector::create(m_mae_L1,  m_mae_L2),
+      Named("sd_mae")   = NumericVector::create(s_mae_L1,  s_mae_L2)
+    );
+
+    // full-data summary (both losses)
+    DataFrame fulldf = DataFrame::create(
+      Named("loss") = CharacterVector::create("L1","L2"),
+      Named("a")    = NumericVector::create(full_L1.a, full_L2.a),
+      Named("b")    = NumericVector::create(full_L1.b, full_L2.b),
+      Named("mse")  = NumericVector::create(full_L1.mse, full_L2.mse),
+      Named("rmse") = NumericVector::create(full_L1.rmse, full_L2.rmse),
+      Named("mae")  = NumericVector::create(full_L1.mae, full_L2.mae)
+    );
+
+    return List::create(
+      Named("model")            = model_type,
+      Named("chosen_loss")      = winner,
+      Named("coefficients")     = NumericVector::create(_["a"]=full_win.a, _["b"]=full_win.b),
+      Named("fitted.values")    = full_win.fitted,
+      Named("rmse")             = full_win.rmse,
+      Named("mae")              = full_win.mae,
+      Named("mse")              = full_win.mse,
+      Named("cv_results")       = cvdf,
+      Named("all_results")      = fulldf,
+      Named("selection_metric") = std::string("CV-") + (metric=="rmse"?"RMSE":"MAE") + " (k=5)",
+      Named("selection_score")  = cv_score
+    );
 }

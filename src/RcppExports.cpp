@@ -10,28 +10,23 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
-// fit_model_cpp
-List fit_model_cpp(NumericVector x, NumericVector y, std::string model_type, NumericVector start_params, double a_min, double a_max, double b_min, double b_max, double step);
-RcppExport SEXP _smartcurvefit_fit_model_cpp(SEXP xSEXP, SEXP ySEXP, SEXP model_typeSEXP, SEXP start_paramsSEXP, SEXP a_minSEXP, SEXP a_maxSEXP, SEXP b_minSEXP, SEXP b_maxSEXP, SEXP stepSEXP) {
+// fit_model_cv_cpp
+List fit_model_cv_cpp(NumericVector x, NumericVector y, std::string model_type, std::string select_metric);
+RcppExport SEXP _smartcurvefit_fit_model_cv_cpp(SEXP xSEXP, SEXP ySEXP, SEXP model_typeSEXP, SEXP select_metricSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< NumericVector >::type x(xSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type y(ySEXP);
     Rcpp::traits::input_parameter< std::string >::type model_type(model_typeSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type start_params(start_paramsSEXP);
-    Rcpp::traits::input_parameter< double >::type a_min(a_minSEXP);
-    Rcpp::traits::input_parameter< double >::type a_max(a_maxSEXP);
-    Rcpp::traits::input_parameter< double >::type b_min(b_minSEXP);
-    Rcpp::traits::input_parameter< double >::type b_max(b_maxSEXP);
-    Rcpp::traits::input_parameter< double >::type step(stepSEXP);
-    rcpp_result_gen = Rcpp::wrap(fit_model_cpp(x, y, model_type, start_params, a_min, a_max, b_min, b_max, step));
+    Rcpp::traits::input_parameter< std::string >::type select_metric(select_metricSEXP);
+    rcpp_result_gen = Rcpp::wrap(fit_model_cv_cpp(x, y, model_type, select_metric));
     return rcpp_result_gen;
 END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_smartcurvefit_fit_model_cpp", (DL_FUNC) &_smartcurvefit_fit_model_cpp, 9},
+    {"_smartcurvefit_fit_model_cv_cpp", (DL_FUNC) &_smartcurvefit_fit_model_cv_cpp, 4},
     {NULL, NULL, 0}
 };
 
