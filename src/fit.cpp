@@ -160,127 +160,129 @@ List fit_model_cv_cpp(NumericVector x, NumericVector y,
   if (n != y.size()) Rcpp::stop("Error: x and y must have the same length.");
   if (n < 3)         Rcpp::stop("Error: Need at least three points for CV.");
   for (int i=0;i<n;++i)
+    {
     if (!R_finite(x[i]) || !R_finite(y[i])) Rcpp::stop("Error: Non-finite values detected.");
-
-    // model choice
-    if (model_type == "" || model_type == "auto") model_type = "power_law";
-    if (model_type != "power_law" && model_type != "exponential")
-      Rcpp::stop("Error: Unsupported model type. Use 'power_law' or 'exponential'.");
-    if (model_type == "power_law") {
-      for (int i=0;i<n;++i) if (x[i] <= 0.0) Rcpp::stop("Error: For power_law, all x must be > 0.");
     }
 
-    // lower-case metric
-    std::string metric = select_metric;
-    std::transform(metric.begin(), metric.end(), metric.begin(), ::tolower);
-    if (metric != "rmse" && metric != "mae")
-      Rcpp::stop("Error: metric must be 'rmse' or 'mae'.");
-
-    // build folds
-    int k = std::min(5, n); if (k < 2) k = 2;
-    std::vector<int> fid = make_fold_ids(n, k);
-
-    // CV accumulators
-    std::vector<double> rmse_L1(k), mae_L1(k), rmse_L2(k), mae_L2(k);
-
-    // per-fold train/val
-    for (int f=0; f<k; ++f) {
-      // split
-      std::vector<int> trn_idx, val_idx;
-      trn_idx.reserve(n); val_idx.reserve(n/k + 1);
-      for (int i=0;i<n;++i) {
-        if (fid[i] == f) val_idx.push_back(i);
-        else trn_idx.push_back(i);
-      }
-      // build vectors
-      NumericVector xtr(trn_idx.size()), ytr(trn_idx.size());
-      NumericVector xva(val_idx.size()), yva(val_idx.size());
-      for (size_t j=0;j<trn_idx.size();++j){ xtr[j]=x[trn_idx[j]]; ytr[j]=y[trn_idx[j]]; }
-      for (size_t j=0;j<val_idx.size();++j){ xva[j]=x[val_idx[j]]; yva[j]=y[val_idx[j]]; }
-
-      // starts from training set
-      NumericVector start = (model_type == "power_law") ?
-      start_guess_power(xtr, ytr) : start_guess_exp(xtr, ytr);
-
-      // fit both losses on training
-      bool enforce_pos = (model_type == "power_law");
-      FitResult trn_L1 = fit_one_loss_local(xtr, ytr, model_type, "L1", start, enforce_pos);
-      FitResult trn_L2 = fit_one_loss_local(xtr, ytr, model_type, "L2", start, enforce_pos);
-
-      // validate on held-out fold
-      std::unique_ptr<Model> model;
-      if (model_type == "power_law")      model.reset(new PowerLawModel());
-      else                                model.reset(new ExponentialModel());
-
-      NumericVector yhat1 = model->predict(xva, NumericVector::create(trn_L1.a, trn_L1.b));
-      NumericVector yhat2 = model->predict(xva, NumericVector::create(trn_L2.a, trn_L2.b));
-
-      rmse_L1[f] = rmse_of(yva, yhat1);
-      mae_L1[f]  = mae_of(yva, yhat1);
-      rmse_L2[f] = rmse_of(yva, yhat2);
-      mae_L2[f]  = mae_of(yva, yhat2);
+  // model choice
+  if (model_type == "" || model_type == "auto") model_type = "power_law";
+  if (model_type != "power_law" && model_type != "exponential")
+    Rcpp::stop("Error: Unsupported model type. Use 'power_law' or 'exponential'.");
+  if (model_type == "power_law") {
+    for (int i=0;i<n;++i) if (x[i] <= 0.0) Rcpp::stop("Error: For power_law, all x must be > 0.");
     }
 
-    auto mean_of = [](const std::vector<double>& v){
-      double s=0; for(double z: v) s+=z; return s / (double)v.size();
-    };
-    auto sd_of = [](const std::vector<double>& v){
-      double m=0; for(double z: v) m+=z; m/=v.size();
-      double s=0; for(double z: v) { double d=z-m; s+=d*d; }
-      return std::sqrt(s/(double)(v.size()>1? v.size()-1 : 1));
-    };
+  // lower-case metric
+   std::string metric = select_metric;
+   std::transform(metric.begin(), metric.end(), metric.begin(), ::tolower);
+   if (metric != "rmse" && metric != "mae")
+     Rcpp::stop("Error: metric must be 'rmse' or 'mae'.");
 
-    double m_rmse_L1 = mean_of(rmse_L1), m_rmse_L2 = mean_of(rmse_L2);
-    double m_mae_L1  = mean_of(mae_L1),  m_mae_L2  = mean_of(mae_L2);
-    double s_rmse_L1 = sd_of(rmse_L1),   s_rmse_L2 = sd_of(rmse_L2);
-    double s_mae_L1  = sd_of(mae_L1),    s_mae_L2  = sd_of(mae_L2);
+   // build folds
+   int k = std::min(5, n); if (k < 2) k = 2;
+   std::vector<int> fid = make_fold_ids(n, k);
 
-    // choose winner by chosen metric
-    std::string winner = (metric == "rmse")
-      ? ((m_rmse_L1 <= m_rmse_L2) ? "L1" : "L2")
-      : ((m_mae_L1  <= m_mae_L2)  ? "L1" : "L2");
-    double cv_score = (metric == "rmse") ? ((winner=="L1")? m_rmse_L1 : m_rmse_L2)
-      : ((winner=="L1")? m_mae_L1  : m_mae_L2);
+   // CV accumulators
+   std::vector<double> rmse_L1(k), mae_L1(k), rmse_L2(k), mae_L2(k);
 
-    // Refit on FULL data with winning loss
-    NumericVector start_full = (model_type == "power_law")
-      ? start_guess_power(x, y) : start_guess_exp(x, y);
-    bool enforce_pos_full = (model_type == "power_law");
+   // per-fold train/val
+   for (int f=0; f<k; ++f) {
+     // split
+     std::vector<int> trn_idx, val_idx;
+     trn_idx.reserve(n); val_idx.reserve(n/k + 1);
+     for (int i=0;i<n;++i) {
+       if (fid[i] == f) val_idx.push_back(i);
+       else trn_idx.push_back(i);
+     }
+     // build vectors
+     NumericVector xtr(trn_idx.size()), ytr(trn_idx.size());
+     NumericVector xva(val_idx.size()), yva(val_idx.size());
+     for (size_t j=0;j<trn_idx.size();++j){ xtr[j]=x[trn_idx[j]]; ytr[j]=y[trn_idx[j]]; }
+     for (size_t j=0;j<val_idx.size();++j){ xva[j]=x[val_idx[j]]; yva[j]=y[val_idx[j]]; }
 
-    FitResult full_L1 = fit_one_loss_local(x, y, model_type, "L1", start_full, enforce_pos_full);
-    FitResult full_L2 = fit_one_loss_local(x, y, model_type, "L2", start_full, enforce_pos_full);
-    FitResult full_win = (winner == "L1") ? full_L1 : full_L2;
+     // starts from training set
+     NumericVector start = (model_type == "power_law") ?
+     start_guess_power(xtr, ytr) : start_guess_exp(xtr, ytr);
 
-    // CV summary dataframe
-    DataFrame cvdf = DataFrame::create(
-      Named("loss")     = CharacterVector::create("L1","L2"),
-      Named("mean_rmse")= NumericVector::create(m_rmse_L1, m_rmse_L2),
-      Named("sd_rmse")  = NumericVector::create(s_rmse_L1, s_rmse_L2),
-      Named("mean_mae") = NumericVector::create(m_mae_L1,  m_mae_L2),
-      Named("sd_mae")   = NumericVector::create(s_mae_L1,  s_mae_L2)
-    );
+     // fit both losses on training
+     bool enforce_pos = (model_type == "power_law");
+     FitResult trn_L1 = fit_one_loss_local(xtr, ytr, model_type, "L1", start, enforce_pos);
+     FitResult trn_L2 = fit_one_loss_local(xtr, ytr, model_type, "L2", start, enforce_pos);
 
-    // full-data summary (both losses)
-    DataFrame fulldf = DataFrame::create(
-      Named("loss") = CharacterVector::create("L1","L2"),
-      Named("a")    = NumericVector::create(full_L1.a, full_L2.a),
-      Named("b")    = NumericVector::create(full_L1.b, full_L2.b),
-      Named("mse")  = NumericVector::create(full_L1.mse, full_L2.mse),
-      Named("rmse") = NumericVector::create(full_L1.rmse, full_L2.rmse),
-      Named("mae")  = NumericVector::create(full_L1.mae, full_L2.mae)
-    );
+     // validate on held-out fold
+     std::unique_ptr<Model> model;
+     if (model_type == "power_law")      model.reset(new PowerLawModel());
+     else                                model.reset(new ExponentialModel());
 
-    return List::create(
-      Named("model")            = model_type,
-      Named("chosen_loss")      = winner,
-      Named("coefficients")     = NumericVector::create(_["a"]=full_win.a, _["b"]=full_win.b),
-      Named("fitted.values")    = full_win.fitted,
-      Named("rmse")             = full_win.rmse,
-      Named("mae")              = full_win.mae,
-      Named("mse")              = full_win.mse,
-      Named("cv_results")       = cvdf,
-      Named("all_results")      = fulldf,
-      Named("selection_metric") = std::string("CV-") + (metric=="rmse"?"RMSE":"MAE") + " (k=5)",
-      Named("selection_score")  = cv_score
-    );
+     NumericVector yhat1 = model->predict(xva, NumericVector::create(trn_L1.a, trn_L1.b));
+     NumericVector yhat2 = model->predict(xva, NumericVector::create(trn_L2.a, trn_L2.b));
+
+     rmse_L1[f] = rmse_of(yva, yhat1);
+     mae_L1[f]  = mae_of(yva, yhat1);
+     rmse_L2[f] = rmse_of(yva, yhat2);
+     mae_L2[f]  = mae_of(yva, yhat2);
+   }
+
+   auto mean_of = [](const std::vector<double>& v){
+     double s=0; for(double z: v) s+=z; return s / (double)v.size();
+   };
+   auto sd_of = [](const std::vector<double>& v){
+     double m=0; for(double z: v) m+=z; m/=v.size();
+     double s=0; for(double z: v) { double d=z-m; s+=d*d; }
+     return std::sqrt(s/(double)(v.size()>1? v.size()-1 : 1));
+   };
+
+   double m_rmse_L1 = mean_of(rmse_L1), m_rmse_L2 = mean_of(rmse_L2);
+   double m_mae_L1  = mean_of(mae_L1),  m_mae_L2  = mean_of(mae_L2);
+   double s_rmse_L1 = sd_of(rmse_L1),   s_rmse_L2 = sd_of(rmse_L2);
+   double s_mae_L1  = sd_of(mae_L1),    s_mae_L2  = sd_of(mae_L2);
+
+   // choose winner by chosen metric
+   std::string winner = (metric == "rmse")
+     ? ((m_rmse_L1 <= m_rmse_L2) ? "L1" : "L2")
+     : ((m_mae_L1  <= m_mae_L2)  ? "L1" : "L2");
+   double cv_score = (metric == "rmse") ? ((winner=="L1")? m_rmse_L1 : m_rmse_L2)
+     : ((winner=="L1")? m_mae_L1  : m_mae_L2);
+
+   // Refit on FULL data with winning loss
+   NumericVector start_full = (model_type == "power_law")
+     ? start_guess_power(x, y) : start_guess_exp(x, y);
+   bool enforce_pos_full = (model_type == "power_law");
+
+   FitResult full_L1 = fit_one_loss_local(x, y, model_type, "L1", start_full, enforce_pos_full);
+   FitResult full_L2 = fit_one_loss_local(x, y, model_type, "L2", start_full, enforce_pos_full);
+   FitResult full_win = (winner == "L1") ? full_L1 : full_L2;
+
+   // CV summary dataframe
+   DataFrame cvdf = DataFrame::create(
+     Named("loss")     = CharacterVector::create("L1","L2"),
+     Named("mean_rmse")= NumericVector::create(m_rmse_L1, m_rmse_L2),
+     Named("sd_rmse")  = NumericVector::create(s_rmse_L1, s_rmse_L2),
+     Named("mean_mae") = NumericVector::create(m_mae_L1,  m_mae_L2),
+     Named("sd_mae")   = NumericVector::create(s_mae_L1,  s_mae_L2)
+   );
+
+   // full-data summary (both losses)
+   DataFrame fulldf = DataFrame::create(
+     Named("loss") = CharacterVector::create("L1","L2"),
+     Named("a")    = NumericVector::create(full_L1.a, full_L2.a),
+     Named("b")    = NumericVector::create(full_L1.b, full_L2.b),
+     Named("mse")  = NumericVector::create(full_L1.mse, full_L2.mse),
+     Named("rmse") = NumericVector::create(full_L1.rmse, full_L2.rmse),
+     Named("mae")  = NumericVector::create(full_L1.mae, full_L2.mae)
+   );
+
+   return List::create(
+     Named("model")            = model_type,
+     Named("chosen_loss")      = winner,
+     Named("coefficients")     = NumericVector::create(_["a"]=full_win.a, _["b"]=full_win.b),
+     Named("fitted.values")    = full_win.fitted,
+     Named("rmse")             = full_win.rmse,
+     Named("mae")              = full_win.mae,
+     Named("mse")              = full_win.mse,
+     Named("cv_results")       = cvdf,
+     Named("all_results")      = fulldf,
+     Named("selection_metric") = std::string("CV-") + (metric=="rmse"?"RMSE":"MAE") + " (k=5)",
+     Named("selection_score")  = cv_score
+   );
 }
