@@ -2,22 +2,96 @@
 % Please edit documentation in R/fit_model.R
 \name{fit_model}
 \alias{fit_model}
-\title{Fit a nonlinear model using C++ (power law, L2 loss only)}
+\title{Fit Nonlinear Models with Cross-Validated Loss Selection}
 \usage{
-fit_model(x, y, model_type = "power_law", start_params = c(1, 1))
+fit_model(x, y, model_type = NULL, metric = "rmse", ...)
 }
 \arguments{
-\item{x}{Numeric predictor}
+\item{x}{Numeric predictor vector.}
 
-\item{y}{Numeric response}
+\item{y}{Numeric response vector.}
 
-\item{model_type}{Only "power_law" is supported for now}
+\item{model_type}{Character string, one of \code{"power_law"}, \code{"exponential"},
+or \code{"logarithmic"}. If omitted or NULL, defaults to \code{"power_law"}.}
 
-\item{start_params}{Starting values for model parameters (default: c(1,1))}
+\item{metric}{Selection criterion across CV folds: \code{"rmse"} (default) or \code{"mae"}.}
+
+\item{...}{Currently unused. Included for forward/backward compatibility with
+other generics. Supplying extra arguments will trigger a warning.}
 }
 \value{
-S3 object of class 'smartFit'
+An S3 object of class \code{"smartFit"}, containing:
+\itemize{
+\item estimated coefficients \code{a} and \code{b}
+\item fitted values and residuals
+\item cross-validated errors for each loss
+\item selection results (chosen loss + score)
+\item full-data refits under all losses
+}
 }
 \description{
-Fit a nonlinear model using C++ (power law, L2 loss only)
+Fits nonlinear models of type \strong{power-law}, \strong{exponential}, or \strong{logarithmic}
+to paired data \verb{(x,y)} using an efficient C++ backend. The function automatically
+estimates the model coefficients \code{a} and \code{b}; only the data needs to be provided.
+}
+\details{
+Functional forms:
+\itemize{
+\item \strong{Power law:}     y ~ a * x^b
+\item \strong{Exponential:}   y ~ a * exp(b * x)
+\item \strong{Logarithmic:}   y ~ a + b * log(x)
+}
+
+Model fitting is robustified via 5-fold cross-validation comparing
+L1 (MAE), L2 (MSE), and Huber losses. The best loss is chosen according
+to the selection metric (\code{"rmse"} (default) or \code{"mae"}), and the model is refit on the
+full data under that loss.
+
+The function performs extensive input validation:
+\itemize{
+\item \code{x} and \code{y} must be numeric vectors of equal length with at least 3 points.
+\item Missing (\code{NA}/\code{NaN}) or infinite values are not allowed.
+\item For \code{"power_law"} and \code{"logarithmic"}, \code{x} must be strictly positive.
+\item Warnings may be issued for:
+\itemize{
+\item unstable fits when \code{x < 1} in a power-law model
+\item very large or small values that risk overflow/underflow
+\item datasets exceeding recommended size (performance warning)
+\item omitting \code{model_type} (defaults to \code{"power_law"})
+\item unused arguments passed via \code{...}
+}
+}
+}
+\examples{
+set.seed(42)
+x <- 1:30
+
+# --- Power-law example ---
+y_power <- 2.3 + x^0.9 + rnorm(length(x))
+fit_power <- fit_model(x, y_power, model_type = "power_law")
+print(fit_power)
+summary(fit_power)
+plot(fit_power, show_residuals = TRUE)
+
+# Predict on new data
+predict(fit_power, newdata = c(5, 10, 15))
+
+# --- Exponential example ---
+y_exp <- 2.6 + exp(0.08 * x) + rnorm(length(x))
+fit_exp <- fit_model(x, y_exp, model_type = "exponential")
+summary(fit_exp)
+plot(fit_exp)
+
+# Predict on new data
+predict(fit_exp, newdata = c(1, 2, 3))
+
+# --- Logarithmic example ---
+y_log <- 3 + 2 * log(x) + rnorm(length(x))
+fit_log <- fit_model(x, y_log, model_type = "logarithmic")
+summary(fit_log)
+plot(fit_log, col_points = "darkgreen")
+
+# Predict on new data
+predict(fit_log, newdata = c(2, 5, 10))
+
 }

@@ -1,9 +1,15 @@
 Package: smartcurvefit
-Title: What the Package Does (One Line, Title Case)
-Version: 1.5.0
+Title: Robust Nonlinear Curve Fitting with Automatic Loss Selection
+Version: 3.4.0
 Authors@R: 
-    person("First", "Last", , "first.last@example.com", role = c("aut", "cre"))
-Description: What the package does (one paragraph).
+    person("Swati", "Swati", email = "jhaswati694@gmail.com", role = c("aut", "cre"))
+Description: Provides tools for robust nonlinear curve fitting, supporting 
+    power-law, exponential, and logarithmic models. The package integrates a 
+    C++ backend for efficient optimization and implements multiple loss 
+    functions (L1, L2, and Huber). A cross-validation framework automatically 
+    selects the best loss function for a given dataset. S3 methods are 
+    included for model fitting, printing, summarizing, and visualization, 
+    with extensive input validation to ensure reliability.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
@@ -13,5 +19,8 @@ LinkingTo:
 Imports: 
     Rcpp
 Suggests: 
+    knitr,
+    rmarkdown,
     testthat (>= 3.0.0)
 Config/testthat/edition: 3
+VignetteBuilder: knitr

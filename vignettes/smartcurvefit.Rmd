@@ -1,0 +1,139 @@
+---
+title: "Getting Started with smartcurvefit"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting Started with smartcurvefit}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.align = "center",
+  fig.width = 6,
+  fig.height = 4
+)
+```
+
+# Introduction
+
+The **smartcurvefit** package provides a simple and robust way to fit **nonlinear models**
+to data. Supported model types are:
+
+- **Power law:**     *y ≈ a × x^b*
+- **Exponential:**   *y ≈ a × exp(b × x)*
+- **Logarithmic:**   *y ≈ a + b × log(x)*
+
+Key features:
+
+- Estimates coefficients `a` and `b` automatically (only data required).
+- Uses a fast **C++ backend** for model fitting.
+- Performs **5-fold cross-validation** to compare **L1 (MAE)**, **L2 (MSE)**, and **Huber** losses.
+- Selects the best loss function (`"rmse"` or `"mae"`) and refits on the full dataset.
+- Provides user-friendly `print`, `summary`, `plot` and `predict` methods.
+
+This vignette walks through common use cases.
+
+---
+
+# Fitting a Power-Law Model
+
+```{r}
+library(smartcurvefit)
+
+set.seed(42)
+x <- 1:30
+y <- 2.3 * x^0.9 + rnorm(length(x), sd = 3)
+
+fit_power <- fit_model(x, y, model_type = "power_law")
+
+print(fit_power)      # concise output
+summary(fit_power)    # extended diagnostics
+plot(fit_power)       # fitted curve
+```
+
+You can also plot residuals:
+
+```{r}
+plot(fit_power, show_residuals = TRUE)
+```
+
+---
+
+# Fitting an Exponential Model
+
+```{r}
+set.seed(123)
+x <- 1:30
+y_exp <- 2.5 * exp(0.08 * x) + rnorm(length(x), sd = 5)
+
+fit_exp <- fit_model(x, y_exp, model_type = "exponential")
+
+summary(fit_exp)
+plot(fit_exp, col_points = "darkred")
+```
+
+---
+
+# Fitting a Logarithmic Model
+
+```{r}
+set.seed(321)
+x <- 1:50
+y_log <- 3 + 2 * log(x) + rnorm(length(x), sd = 2)
+
+fit_log <- fit_model(x, y_log, model_type = "logarithmic")
+
+summary(fit_log)
+plot(fit_log, col_points = "darkgreen")
+```
+
+---
+
+# Cross-Validation Results
+
+Every fitted object stores the **cross-validated errors** for each loss:
+
+```{r}
+fit_power$cv_results
+```
+
+And the **full-data refits**:
+
+```{r}
+fit_power$all_results
+```
+
+---
+
+# Error Handling and Warnings
+
+`fit_model()` validates inputs strictly:
+
+- `x` and `y` must be numeric, equal length, and at least 3 points.
+- Missing (`NA`/`NaN`) and infinite values are not allowed.
+- Power-law and logarithmic models require strictly positive `x`.
+
+Warnings may appear for:
+
+- **Unstable fits** (power-law with `x < 1`).
+- **Extreme values** risking overflow/underflow.
+- **Very large datasets** (performance caution).
+- **Omitted model type**, in which case `"power_law"` is used by default.
+
+---
+
+# Conclusion
+
+The **smartcurvefit** package makes nonlinear curve fitting **robust**, **fast**, and **easy to interpret**.  
+It is ideal for exploratory data analysis, model comparison, and teaching purposes.
+
+For more details, see the documentation of:
+
+- `?fit_model`
+- `?print.smartFit`
+- `?summary.smartFit`
+- `?plot.smartFit`
+- `?predict.smartFit`
