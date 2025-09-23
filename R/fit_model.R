@@ -419,6 +419,7 @@ plot.smartFit <- function(x, y, ...,
 
   ord <- order(x$x)
   lines(x$x[ord], x$fitted.values[ord], col = col_line, lwd = lwd_line)
+  grid(col = "lightgray", lty = "dotted")
 
   # --- residual plot ---
   if (show_residuals && !is.null(x$residuals)) {
@@ -427,10 +428,13 @@ plot.smartFit <- function(x, y, ...,
          main = "Residuals vs Fitted",
          xlab = "Fitted values", ylab = "Residuals")
     abline(h = 0, lty = 2, col = "gray40")
+    grid(col = "lightgray", lty = "dotted")
   }
 
   invisible(x)
 }
+
+
 
 #' Predict from a SmartCurveFit Model
 #'

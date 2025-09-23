@@ -1,3 +1,4 @@
+
 // fit.cpp
 #include <Rcpp.h>
 #include <cmath>
@@ -121,7 +122,7 @@ static FitResult fit_one_loss_local(const NumericVector& x, const NumericVector&
   const double a0 = start_params[0];
   const double b0 = start_params[1];
 
-// window size and step size to search for parameters range
+  // window size and step size to search for parameters range
 
   double widen_factor = (loss_name == "L1") ? 1.5 : 1.0;
   double wa = widen_factor * std::max(0.5 * std::fabs(a0), 0.25);
@@ -189,7 +190,8 @@ List fit_model_cv_cpp(NumericVector x, NumericVector y,
   for (int i=0;i<n;++i)
     if (!R_finite(x[i]) || !R_finite(y[i])) Rcpp::stop("Error: Non-finite values detected.");
 
-  if (model_type == "" || model_type == "auto") model_type = "power_law";
+  if (model_type == "" || model_type == "auto")
+    model_type = "power_law";
   if (model_type != "power_law" && model_type != "exponential" && model_type != "logarithmic")
     Rcpp::stop("Error: Unsupported model type.");
   if ((model_type == "power_law" || model_type == "logarithmic")) {
