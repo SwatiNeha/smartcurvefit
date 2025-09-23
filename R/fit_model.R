@@ -374,7 +374,7 @@ summary.smartFit <- function(object, ...) {
 #' # Invalid argument triggers warning
 #' plot(fit, badarg = 99)
 #'
-#' @importFrom graphics par lines abline
+#' @importFrom graphics par lines abline grid
 #' @export
 plot.smartFit <- function(x, y, ...,
                           show_residuals = FALSE,
