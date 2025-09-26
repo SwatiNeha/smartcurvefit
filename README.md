@@ -98,7 +98,7 @@ install.packages("remotes")
 remotes::install_github("SwatiNeha/smartcurvefit", build_vignettes = TRUE)
 ```
 
-- If you want to install testthat files also: (⚠️ non ideal)
+- If you want to install testthat files also:
 
 ```r
 remotes::install_github(
