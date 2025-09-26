@@ -223,84 +223,157 @@ A detailed vignette (design, extended examples) is **under construction**.
 
 ## 🧪 Test Plan
 
-This package uses the **testthat** framework to ensure correctness, robustness, and reproducibility of all implemented functionality.
+The **testing strategy** for all exported and internal functions in the `smartcurvefit` package are given below  
+All tests are written using the **testthat** framework.  
+The goal is to ensure **correctness, robustness, reproducibility, and clarity of error handling**.
 
-### Scope of Testing
+## 📌 Core Principles
 
-#### 1. Core functionality (`test-fit_model.R`)
+- **Required arguments** must be validated and covered in unit tests.  
+- **Optional arguments** must be tested for defaults, warnings, and ignored behavior.  
+- **Edge cases** must trigger clear, informative errors or warnings.  
+- **Return objects** must always match the documented class/structure.  
+- **Consistency** across functions is essential (S3 generics must behave as expected).
 
-- **Model fitting**
-  - Correct behavior for `power_law`, `exponential`, `logarithmic` models.
-  - Checks coefficients, residuals, and metrics (RMSE, MAE, MSE).
 
-- **Cross-validation**
-  - Verifies correct computation of fold-wise errors.
-  - Ensures loss selection among **L1**, **L2**, **Huber** works properly.
+## 🔧 Function-by-Function Test Plan
 
-- **Return structure**
+### 1. `fit_model(x, y, model_type = NULL, metric = "rmse", ...)`
+
+**Arguments**
+- `x`, `y` → required; numeric vectors of equal length, ≥ 3 points.  
+- `model_type` → optional; one of `"power_law"`, `"exponential"`, `"logarithmic"` (default `"power_law"`).  
+- `metric` → optional; `"rmse"` (default) or `"mae"`.  
+- `...` → unused; might trigger warning.  
+
+**Tests**
+-  Successful fits for all three models.  
+-  Default to `"power_law"` when `model_type = NULL`.  
+-  Errors for:
+  - Non-numeric `x` or `y`.  
+  - Mismatched lengths.  
+  - Fewer than 3 points.  
+  - NA/NaN/Inf values.  
+  - Unsupported `model_type`.  
+-  Warnings for:
+  - `x < 1` in `"power_law"`.  
+  - Extremely large/small magnitudes (overflow/underflow).  
+  - Large dataset (via `.check_input_size_fit()`).  
+  - Unused arguments.  
+- Return object with required fields.
   - Confirms returned object is of class `smartFit`.
   - Confirms contents: coefficients, fitted values, residuals, CV results, all-results.
 
-#### 2. Input validation (`test-fit_model.R`)
 
-- Rejects non-numeric inputs (`"a"`, `"b"`).
-- Rejects mismatched vector lengths (`x = 1:3, y = 1:2`).
-- Rejects missing values (`NA`, `NaN`).
-- Rejects infinite values.
-- Enforces model-specific domain rules:
-  - `power_law` / `logarithmic`: `x > 0`.
-  - `power_law`: warns when `x < 1`.
-- Ensures minimum dataset size (`n >= 3`).
-- Errors on unsupported `model_type`.
+### 2. `print.smartFit(x, ...)`
 
-#### 3. S3 methods (`test-print_summary_plot_predict.R`)
+**Arguments**
+- `x` → required; must be `"smartFit"`.  
+- `...` → unused; may trigger warning.  
 
-- **`print.smartFit`**
-  - Displays model type, loss, coefficients, and metrics.
-  - Warns on unused arguments.
-  - Errors on invalid object or missing fields.
+**Tests**
+- Displays model type, loss, coefficients, metrics, and compact CV results.  
+- Errors if object is not `"smartFit"` or missing fields.  
+- Warnings for unused arguments.  
+- Output includes model formula (`y ~ a * x^b`, etc.).
 
-- **`summary.smartFit`**
-  - Prints extended diagnostics: residuals, CV results, all-loss fits.
-  - Warns on unused arguments.
-  - Errors on invalid object or missing coefficients.
 
-- **`plot.smartFit`**
-  - Produces fitted curve + residual plots.
-  - Accepts custom styling (`col`, `pch`, `lwd`).
-  - Warns on invalid arguments.
-  - Errors on non-`smartFit` objects.
+### 3. `summary.smartFit(object, ...)`
 
-- **`predict.smartFit`**
-  - Predicts on training data and new data.
-  - Handles domain errors (`x <= 0` for log/power-law).
-  - Rejects invalid input (`NA`, `NaN`, `Inf`, non-numeric, empty vectors).
-  - Warns for very large datasets (via utils).
-  - Errors on invalid object or missing fields.
+**Arguments**
+- `object` → required; `"smartFit"`.  
+- `...` → unused; may trigger warning.  
 
-#### 4. Utility functions (`utils-check.R`)
+**Tests**
+- Shows extended diagnostics: coefficients, fit metrics, residual summary, CV results, all-loss fits.  
+- Errors for invalid object or missing fields.  
+- Warnings for unused arguments.  
 
-- **`.check_input_size_fit()`**
-  - Issues warnings when dataset size exceeds threshold (`n_threshold = 5000`).
-  - Silent for small datasets.
 
-- **`.check_input_size_predict()`**
-  - Issues warnings for extremely large prediction sets (`n_threshold = 2e8`).
-  - Ensures scalability limits are flagged.
+### 4. `plot.smartFit(x, y, ..., show_residuals = FALSE, col_points = "steelblue", pch_points = 19, col_line = "red", lwd_line = 2)`
 
-> Both functions are tested indirectly via warnings in `fit_model()` and `predict()`.
+**Arguments**
+- `x` → required; `"smartFit"`.  
+- `y` → ignored.  
+- `show_residuals` → optional; toggles residual plot.  
+- Graphical args (`col_points`, `pch_points`, etc.).  
+- `...` → optional; invalid args trigger warning.  
+
+**Tests**
+- Scatter plot + fitted curve.  
+- Residual plot when `show_residuals = TRUE`.  
+- Custom styling applied.  
+- Errors for invalid `"smartFit"` object.  
+- Warnings for invalid graphical args.  
 
 ---
 
-### Edge Cases
+### 5. `predict.smartFit(object, newdata = NULL, ...)`
 
-- Extremely large/small values (`1e120`, `1e-120`).
-- Constant vectors (variance = 0).
-- Precision inputs (long decimals).
-- Missing `model_type` defaults to `"power_law"`.
-- Incorrect S3 object structures.
+**Arguments**
+- `object` → required; `"smartFit"`.  
+- `newdata` → optional; numeric vector, defaults to training `x`.  
+- `...` → unused; may trigger warning.  
+
+**Tests**
+- Predictions consistent with model formulas.  
+- Works on training data and newdata.  
+- Errors for:
+  - Invalid `"smartFit"` object.  
+  - Non-numeric, empty, NA/NaN, Inf `newdata`.  
+  - Domain errors (`x <= 0` for power-law/logarithmic).  
+- Warnings for:
+  - Very large `newdata` (via `.check_input_size_predict()`).  
+  - Unused arguments.  
+
+
+### 6. `.check_input_size_fit(x, y, n_threshold = 5000)` *(internal)*
+
+**Tests**
+- Warns if dataset exceeds threshold.  
+- Silent otherwise.  
+- Indirectly covered through `fit_model()`.  
 
 ---
+
+### 7. `.check_input_size_predict(newdata, n_threshold = 2e8)` *(internal)*
+
+**Tests**
+- Warns if newdata exceeds threshold.  
+- Silent otherwise.  
+- Indirectly covered through `predict.smartFit()`.  
+
+---
+
+## ⚡ Edge Cases (Cross-Function)
+
+- Extremely large (`1e120`) or small (`1e-120`) numbers.  
+- Constant vectors (`sd(x) = 0` or `sd(y) = 0`).  
+- High-precision decimals.  
+- Missing `model_type` → defaults to `"power_law"`.  
+- Incorrect `"smartFit"` structure (missing fields).  
+- Tie-breaking in CV loss selection (priority: L2 → Huber → L1).  
+
+
+## Expected Coverage
+
+- **Unit tests**: each function tested independently.  
+- **Integration tests**: full pipeline (fit → print → summary → plot → predict).  
+- **Validation tests**: input checking and error/warning handling.  
+- **Edge tests**: large datasets, boundary cases, malformed inputs.  
+
+
+## 📋 Test Checklist (at a glance)
+
+| Function              | Valid Inputs | Invalid Inputs | Warnings | Edge Cases | Output Structure |
+|-----------------------|--------------|----------------|----------|------------|------------------|
+| `fit_model()`         | ✅            | ❌              | ⚠️        | ✅          | `"smartFit"` obj |
+| `print.smartFit()`    | ✅            | ❌              | ⚠️        | –          | Console text     |
+| `summary.smartFit()`  | ✅            | ❌              | ⚠️        | –          | Console text     |
+| `plot.smartFit()`     | ✅            | ❌              | ⚠️        | ✅          | Base R plot      |
+| `predict.smartFit()`  | ✅            | ❌              | ⚠️        | ✅          | Numeric vector   |
+| `.check_input_size_*` | ✅            | –              | ⚠️        | ✅          | Invisible TRUE   |
+
 
 ### Example: Correct Input
 
