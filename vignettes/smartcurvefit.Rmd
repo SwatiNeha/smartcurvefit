@@ -33,7 +33,7 @@ Supported model types are:
 
 Key features:
 
-- Automatically estimates coefficients `a` and `b` — only data are required.  
+- Automatically estimates coefficients `a` and `b` - only data are required.  
 - Compares **L1 (MAE)**, **L2 (MSE)**, and **Huber** losses using 5-fold cross-validation.  
 - Selects the best-performing loss (based on RMSE or MAE) and refits the final model.  
 - Provides user-friendly `print()`, `summary()`, `plot()`, and `predict()` methods.  
