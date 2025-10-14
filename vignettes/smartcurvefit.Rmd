@@ -63,7 +63,7 @@ plot(fit_power)       # fitted curve
 
 You can also view residuals to check fit quality:
 
-```{r fig.height=8, fig.width=8}
+```{r fig.height=8}
 plot(fit_power, show_residuals = TRUE)
 ```
 
