@@ -14,7 +14,7 @@ The package automatically **estimates model parameters** (coefficients `a` and `
 - **R/**: Contains R interface functions and S3 methods.
 - **src/**: Contains C++ backend (`fit.cpp`, `loss.cpp`, `models.cpp`) compiled via Rcpp.
 - **tests/testthat/**: Unit tests for all major functions.
-- **vignettes/**: Example usage and design notes (detailed vignette under construction).
+- **vignettes/**: Includes the main vignette *“Getting Started with smartcurvefit”*, demonstrating model fitting, cross-validation, plotting, and prediction workflows.
 
 ### R Files
 - **fit_model.R**  
@@ -72,14 +72,15 @@ The package automatically **estimates model parameters** (coefficients `a` and `
     - `plot.smartFit`: verifies fitted curves and residual plots; ensures warnings for invalid graphical args.  
     - `predict.smartFit`: tests predictions on training data and new data, and error handling for invalid inputs (non-numeric, empty, NA/NaN/Inf, domain violations).  
 
-### Vignettes -- ***Under Development***
-- **Generic vignette available** (shows example fits, summary, and plots).  
-- **Detailed vignettes are under construction**, to cover:
-  - Model theory and derivations.  
-  - Cross-validation strategy.  
-  - Comparing robust loss functions (L1/L2/Huber).  
-  - Extended examples with real-world data.
+### Vignettes (vignettes/)
 
+- **Comprehensive vignette available** — demonstrates model fitting, summaries, plots, and predictions for all supported models (**power-law**, **exponential**, and **logarithmic**).  
+- Covers:  
+  - Model theory and mathematical formulation.  
+  - Cross-validation and automatic loss selection (**L1**, **L2**, **Huber**).  
+  - Robustness comparisons under noisy data.  
+  - Full examples with visualizations and residual diagnostics.
+    
 ---
 
 ## 🚀 Installation
@@ -209,7 +210,7 @@ This will be the case with all the three laws: power_law, exponential and logari
 
 ## 📘 Documentation
 
-- Function manuals: `?fit_model`, `?plot.smartFit`, `?print.smartfit`, `?summary.smartFit`, `?predict.smartFit`, .  
+- Function manuals: `?fit_model`, `?plot.smartFit`, `?print.smartfit`, `?summary.smartFit`, `?predict.smartFit`.  
 - Vignettes: available via  
 
 ```r
