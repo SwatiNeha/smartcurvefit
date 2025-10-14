@@ -15,12 +15,17 @@ knitr::opts_chunk$set(
   fig.width = 6,
   fig.height = 4
 )
+library(smartcurvefit)
 ```
 
-# Introduction
+## Introduction
 
-The **smartcurvefit** package provides a simple and robust way to fit **nonlinear models**
-to data. Supported model types are:
+The **smartcurvefit** package provides a *robust and efficient* framework for fitting nonlinear relationships between variables, even in the presence of outliers or heteroscedastic noise.
+
+Traditional least-squares nonlinear regression can be sensitive to extreme values.  
+`smartcurvefit` addresses this limitation through a **cross-validated loss selection** procedure powered by a **C++ backend** for fast and stable optimization.
+
+Supported model types are:
 
 - **Power law:**     *y ≈ a × x^b*
 - **Exponential:**   *y ≈ a × exp(b × x)*
@@ -28,21 +33,23 @@ to data. Supported model types are:
 
 Key features:
 
-- Estimates coefficients `a` and `b` automatically (only data required).
-- Uses a fast **C++ backend** for model fitting.
-- Performs **5-fold cross-validation** to compare **L1 (MAE)**, **L2 (MSE)**, and **Huber** losses.
-- Selects the best loss function (`"rmse"` or `"mae"`) and refits on the full dataset.
-- Provides user-friendly `print`, `summary`, `plot` and `predict` methods.
-
-This vignette walks through common use cases.
+- Automatically estimates coefficients `a` and `b` — only data are required.  
+- Compares **L1 (MAE)**, **L2 (MSE)**, and **Huber** losses using 5-fold cross-validation.  
+- Selects the best-performing loss (based on RMSE or MAE) and refits the final model.  
+- Provides user-friendly `print()`, `summary()`, `plot()`, and `predict()` methods.  
 
 ---
 
-# Fitting a Power-Law Model
+## How It Works
+
+The core function `fit_model()` automatically fits the chosen model type under three loss functions: **L1**, **L2**, and **Huber**.  
+Each is evaluated via 5-fold cross-validation. The loss with the lowest mean validation error (using `"rmse"` or `"mae"` as the metric) is selected, and the final model is refitted on the full dataset.
+
+---
+
+## Fitting a Power-Law Model
 
 ```{r}
-library(smartcurvefit)
-
 set.seed(42)
 x <- 1:30
 y <- 2.3 * x^0.9 + rnorm(length(x), sd = 3)
@@ -54,15 +61,15 @@ summary(fit_power)    # extended diagnostics
 plot(fit_power)       # fitted curve
 ```
 
-You can also plot residuals:
+You can also view residuals to check fit quality:
 
-```{r}
+```{r fig.height=8, fig.width=8}
 plot(fit_power, show_residuals = TRUE)
 ```
 
 ---
 
-# Fitting an Exponential Model
+## Fitting an Exponential Model
 
 ```{r}
 set.seed(123)
@@ -77,7 +84,7 @@ plot(fit_exp, col_points = "darkred")
 
 ---
 
-# Fitting a Logarithmic Model
+## Fitting a Logarithmic Model
 
 ```{r}
 set.seed(321)
@@ -92,48 +99,83 @@ plot(fit_log, col_points = "darkgreen")
 
 ---
 
-# Cross-Validation Results
+## Making Predictions
 
-Every fitted object stores the **cross-validated errors** for each loss:
+The `predict()` method generates fitted or new predictions for any model type.
+
+```{r}
+set.seed(42)
+x <- 1:30
+y <- 2.3 * x^0.9 + rnorm(length(x), sd = 3)
+fit_power <- fit_model(x, y, model_type = "power_law")
+
+x_new <- seq(1, 30, by = 0.5)
+y_pred <- predict(fit_power, newdata = x_new)
+
+plot(x, y, pch = 19, col = "steelblue",
+     main = "Power-law Model with Predictions",
+     xlab = "x", ylab = "y")
+lines(x_new, y_pred, col = "red", lwd = 2)
+```
+
+The red curve shows the predicted values computed on a dense grid of `x_new` points.
+
+---
+
+## Cross-Validation Results
+
+Each fitted object stores detailed **cross-validation results** for all candidate losses:
 
 ```{r}
 fit_power$cv_results
 ```
 
-And the **full-data refits**:
+and the **full-data refits** under each loss:
 
 ```{r}
 fit_power$all_results
 ```
 
----
-
-# Error Handling and Warnings
-
-`fit_model()` validates inputs strictly:
-
-- `x` and `y` must be numeric, equal length, and at least 3 points.
-- Missing (`NA`/`NaN`) and infinite values are not allowed.
-- Power-law and logarithmic models require strictly positive `x`.
-
-Warnings may appear for:
-
-- **Unstable fits** (power-law with `x < 1`).
-- **Extreme values** risking overflow/underflow.
-- **Very large datasets** (performance caution).
-- **Omitted model type**, in which case `"power_law"` is used by default.
+- The selected loss is reported in `fit_power$chosen_loss`, chosen based on the lowest average validation error.
 
 ---
 
-# Conclusion
+## Error Handling and Warnings
 
-The **smartcurvefit** package makes nonlinear curve fitting **robust**, **fast**, and **easy to interpret**.  
-It is ideal for exploratory data analysis, model comparison, and teaching purposes.
+`fit_model()` includes extensive input validation and informative warnings.
 
-For more details, see the documentation of:
+Requirements:
 
-- `?fit_model`
-- `?print.smartFit`
-- `?summary.smartFit`
-- `?plot.smartFit`
+- `x` and `y` must be numeric, equal length, and contain ≥3 points.  
+- No missing (`NA`, `NaN`) or infinite values.  
+- For `"power_law"` and `"logarithmic"`, `x` must be strictly positive.
+
+Possible warnings:
+
+- **Unstable fits** when `x < 1` in power-law models.  
+- **Extreme values** risking overflow or underflow.  
+- **Large datasets**, triggering performance notes.  
+- **Omitted model_type**, defaults to `"power_law"`.
+
+---
+
+## Conclusion
+
+The **smartcurvefit** package provides a practical and statistically robust approach to nonlinear modeling.  
+By combining multiple loss functions, cross-validation, and a C++ backend, it offers fast, reliable, and interpretable model fitting.
+
+It is well-suited for:
+
+- Exploratory data analysis and curve comparison,  
+- Teaching robust nonlinear regression,  
+- Applied analytics pipelines needing outlier resistance.
+
+For more details, refer to:
+
+- `?fit_model`  
+- `?print.smartFit`  
+- `?summary.smartFit`  
+- `?plot.smartFit`  
 - `?predict.smartFit`
+
+---

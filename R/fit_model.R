@@ -509,7 +509,7 @@ predict.smartFit <- function(object, newdata = NULL, ...) {
       stop("Error: For power_law/logarithmic, all newdata values must be strictly positive (> 0).")
     }
 
-    # 🔹 Large dataset warning
+    # Large dataset warning
     .check_input_size_predict(newdata)
 
     newx <- newdata
