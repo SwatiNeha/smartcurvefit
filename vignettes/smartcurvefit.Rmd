@@ -33,7 +33,7 @@ Supported model types are:
 
 Key features:
 
-- Automatically estimates coefficients `a` and `b` - only data are required.  
+- Automatically estimates coefficients `a` and `b` - no starting values or manual optimization are required.  
 - Compares **L1 (MAE)**, **L2 (MSE)**, and **Huber** losses using 5-fold cross-validation.  
 - Selects the best-performing loss (based on RMSE or MAE) and refits the final model.  
 - Provides user-friendly `print()`, `summary()`, `plot()`, and `predict()` methods.  
@@ -42,8 +42,12 @@ Key features:
 
 ## How It Works
 
-The core function `fit_model()` automatically fits the chosen model type under three loss functions: **L1**, **L2**, and **Huber**.  
-Each is evaluated via 5-fold cross-validation. The loss with the lowest mean validation error (using `"rmse"` or `"mae"` as the metric) is selected, and the final model is refitted on the full dataset.
+The core function `fit_model()` automatically fits the chosen model type under three loss functions: **L1**, **L2**, and **Huber** - using a C++ backend for numerical optimization.  
+
+- The function **estimates parameters `a` and `b` directly from the data**, without requiring the user to provide initial guesses.  
+- Each loss function is evaluated via **5-fold cross-validation**, computing both RMSE and MAE metrics.  
+- The loss with the lowest mean validation error (based on the user-selected metric) is automatically chosen.  
+- Finally, the model is **refitted on the full dataset** using the chosen loss for optimal accuracy and stability.
 
 ---
 
