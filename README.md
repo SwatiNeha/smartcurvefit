@@ -209,16 +209,12 @@ This will be the case with all the three laws: power_law, exponential and logari
 
 ## 📘 Documentation
 
-- Function manuals: `?fit_model`, `?plot.smartFit`, etc.  
+- Function manuals: `?fit_model`, `?plot.smartFit`, `?print.smartfit`, `?summary.smartFit`, `?predict.smartFit`, .  
 - Vignettes: available via  
 
 ```r
 browseVignettes("smartcurvefit")
 ```
-
-⚠️ Only a **generic vignette** is available right now.  
-A detailed vignette (design, extended examples) is **under construction**.
-
 ---
 
 ## 🧪 Test Plan
@@ -399,6 +395,5 @@ The test suite covers the **full lifecycle** of the package — from fitting and
 ## 👩‍🔬 Development Notes
 
 - The C++ backend uses **OOP design** (`Model` + `Loss` classes).  
-- No Placeholder functions
-- Vignette polishing and extended examples are the **only pending tasks**.  
+- No Placeholder functions. 
 
