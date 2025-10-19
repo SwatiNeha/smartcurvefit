@@ -47,8 +47,7 @@ The package automatically **estimates model parameters** (coefficients `a` and `
     - `L2Loss` → Mean Squared Error (inherits from `Loss`).  
     - `L1Loss` → Mean Absolute Error (inherits from `Loss`).  
     - `HuberLoss` → Adaptive robust loss (inherits from `Loss`, uses median/MAD-based δ).  
-  - Each class overrides a common interface (e.g., `compute_loss()`, `gradient()`),  
-    allowing polymorphic behavior when swapping loss functions.
+  - Each class overrides a common interface (e.g., `compute_loss()`), allowing polymorphic behavior when swapping loss functions.
 
 - **models.cpp**  
   - Implements an **OOP hierarchy for regression models**:  
@@ -56,8 +55,7 @@ The package automatically **estimates model parameters** (coefficients `a` and `
     - `PowerLawModel` → \(y = a \cdot x^b\) (inherits from `Model`).  
     - `ExponentialModel` → \(y = a \cdot e^{bx}\) (inherits from `Model`).  
     - `LogModel` → \(y = a + b \cdot \log(x)\) (inherits from `Model`).  
-  - Each model subclass defines its own `predict()` and `fit()` methods,  
-    while sharing the abstract interface from the base class.  
+  - Each model subclass defines its own `predict()` method, while sharing the abstract interface from the base class.  
 
 
 ### Testing (tests/testthat/)
